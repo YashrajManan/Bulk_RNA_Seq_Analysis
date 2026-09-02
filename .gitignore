@@ -1,0 +1,24 @@
+# --- learning / scaffold files (kept private, not part of the public repo) ---
+01_build.R
+01_build.ipynb
+02_build.R
+02_build.ipynb
+*practiced*
+*_tried*
+*ran_once*
+_gen*.py
+
+# --- fetched data (GEO/Ensembl), not committed; keep folder placeholders ---
+data_py/*
+!data_py/.gitkeep
+data_R/*
+!data_R/.gitkeep
+
+# --- python / jupyter / R junk ---
+*.pyc
+__pycache__/
+.ipynb_checkpoints/
+.Rhistory
+.RData
+.Rproj.user/
+*.sqlite
