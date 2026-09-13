@@ -76,6 +76,35 @@ cat("\nTop up-regulated genes on infection:\n")
 print(head(res_ordered[!is.na(res_ordered$padj) & res_ordered$padj < 0.05 &
                        res_ordered$log2FoldChange > 0, ], 15))
 
+## ---- Functional enrichment: GO/KEGG over-representation + GSEA ----
+# Turn the DE gene list into pathways. ORA = hypergeometric test of the significant UP genes
+# against GO/KEGG (background = all tested genes); GSEA = rank ALL genes and find coordinately
+# shifted pathways (NES > 0 up, < 0 down). clusterProfiler needs Entrez IDs, so map symbols first.
+for (p in c("clusterProfiler", "org.Hs.eg.db", "enrichplot"))
+  if (!requireNamespace(p, quietly = TRUE)) BiocManager::install(p, update = FALSE, ask = FALSE)
+library(clusterProfiler); library(org.Hs.eg.db); library(enrichplot)
+de <- as.data.frame(res); de <- de[!is.na(de$padj) & !is.na(de$log2FoldChange), ]
+ids <- bitr(rownames(de), fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
+de$SYMBOL <- rownames(de); de <- merge(de, ids, by = "SYMBOL")
+
+sig_up <- de$ENTREZID[de$padj < 0.05 & de$log2FoldChange > 1]                 # ORA input
+ego <- enrichGO(sig_up, universe = de$ENTREZID, OrgDb = org.Hs.eg.db, ont = "BP",
+                pAdjustMethod = "BH", pvalueCutoff = 0.05, readable = TRUE)
+write.csv(as.data.frame(ego), "results_R/enrichGO_up.csv", row.names = FALSE)
+if (nrow(as.data.frame(ego)) > 0)
+  ggsave("results_R/enrichGO_up_dotplot.png", dotplot(ego, showCategory = 15), width = 8, height = 6, dpi = 150)
+
+ekegg <- enrichKEGG(sig_up, organism = "hsa", pvalueCutoff = 0.05)
+write.csv(as.data.frame(ekegg), "results_R/enrichKEGG_up.csv", row.names = FALSE)
+
+geneList <- sort(setNames(sign(de$log2FoldChange) * -log10(de$pvalue + 1e-300), de$ENTREZID),
+                 decreasing = TRUE)                                           # GSEA: rank all genes
+gse <- gseKEGG(geneList, organism = "hsa", pvalueCutoff = 0.05)
+write.csv(as.data.frame(gse), "results_R/gseKEGG.csv", row.names = FALSE)
+if (nrow(as.data.frame(gse)) > 0)
+  ggsave("results_R/gsea_top.png", gseaplot2(gse, geneSetID = 1), width = 8, height = 6, dpi = 150)
+cat("\nTop GSEA KEGG (by NES):\n"); print(head(as.data.frame(gse)[, c("Description", "NES", "p.adjust")], 10))
+
 ## ---- Interpretation ----
 # PCA is dominated by cell line (PC1 70% + PC2 24% = ~94% of variance); infection is a
 # subtle within-cell-line shift. That is exactly why the design formula matters: with
@@ -83,3 +112,12 @@ print(head(res_ordered[!is.na(res_ordered$padj) & res_ordered$padj < 0.05 &
 # ~ cell_line + infection removes it and reveals the infection effect (3976 sig genes).
 # Top up-regulated genes are inflammatory cytokines (IL36G, IL1A) and antiviral ISGs
 # (MX1) - the imbalanced cytokine/interferon response Blanco-Melo et al. reported.
+#
+# Enrichment collapses that gene list into one coherent program: ORA's top GO term is
+# cytokine-mediated signaling (adj p ~1e-26), and GSEA ranks cytokine-cytokine receptor
+# interaction, TNF, NF-kappa B, NOD-like receptor and JAK-STAT signalling at the top
+# (NES ~ +2.4-2.6, FDR q ~ 0), while oxidative phosphorylation is the strongest DOWN
+# pathway (NES ~ -2.5). Biologically: infection drives a coordinated innate-immune /
+# inflammatory response and suppresses host energy metabolism - a pathway-level result,
+# not a random gene list. Caveats: annotation bias; ORA depends on threshold + universe;
+# pathways overlap; enrichment is correlational.

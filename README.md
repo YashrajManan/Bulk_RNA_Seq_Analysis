@@ -2,8 +2,9 @@
 
 Which genes respond to **SARS-CoV-2 infection** in human airway epithelial cells? A differential-expression
 (DE) analysis of Blanco-Melo et al. 2020 (**GEO GSE147507**), implemented in **R (DESeq2)** and **Python
-(PyDESeq2)** with matching results. The project doubles as a concrete lesson in why the **design formula** —
-not just the code — decides whether a DE result is right.
+(PyDESeq2)** with matching results, then completed with **GO/KEGG functional enrichment (ORA + GSEA)** to turn
+the gene list into pathways. The project doubles as a concrete lesson in why the **design formula** — not just
+the code — decides whether a DE result is right.
 
 ![Volcano: SARS-CoV-2 vs mock](results_R/volcano.png)
 
@@ -42,6 +43,8 @@ a metadata table (cell line + infection status) — a routine real-world data-wr
 4. Run DESeq2; extract results (log₂FC, `padj`); count significant genes.
 5. Compare designs (`~ infection` vs `~ cell_line + infection`) to show the confounder effect.
 6. Shrink fold-changes; plot PCA + volcano; save results.
+7. **Functional enrichment**: GO/KEGG **over-representation** (ORA) on the up-regulated genes, and **GSEA** on
+   all genes ranked by `sign(log2FC) × −log10(p)` — turning the gene list into pathways.
 
 ## 6. Results
 
@@ -55,6 +58,12 @@ a metadata table (cell line + infection status) — a routine real-world data-wr
 Full results in [`results_R/deseq2_results.csv`](results_R/deseq2_results.csv). R and Python give identical
 top genes and fold-changes (e.g. IL36G log₂FC ≈ 2.37, IL1A ≈ 3.25 in both).
 
+**Enrichment.** ORA's top GO term is **cytokine-mediated signaling** (adjusted p ≈ 1×10⁻²⁶); GSEA ranks
+**cytokine-cytokine receptor interaction, TNF, NF-κB, NOD-like receptor** and **JAK-STAT signalling** at the
+top (NES ≈ +2.4–2.6, FDR q ≈ 0), while **oxidative phosphorylation** is the strongest down-regulated pathway
+(NES ≈ −2.5). Tables in `enrichGO_up.csv` / `enrichKEGG_up.csv` / `gseKEGG.csv` (R) and `enrichr_up.csv` /
+`gsea_prerank.csv` (Python).
+
 ## 7. Figures
 
 `results_R/volcano.png` — shrunken-LFC volcano (hero, above); `pca.png` — sample PCA. Python equivalents in
@@ -64,8 +73,9 @@ top genes and fold-changes (e.g. IL36G log₂FC ≈ 2.37, IL1A ≈ 3.25 in both)
 
 - Three cell lines with few replicates each — modest power; results are cell-culture, not in-vivo, biology.
 - Genomic-span/count-level analysis only; no isoform- or allele-level resolution.
-- No pathway/enrichment step here (a natural extension); interpretation is based on top individual genes.
-- DE detects association with infection status, not causal/mechanistic direction.
+- Enrichment inherits annotation bias (well-studied immune genes are over-represented in GO/KEGG); ORA also
+  depends on the significance threshold + chosen background, and pathways overlap (tests are not independent).
+- DE + enrichment detect association with infection status, not causal/mechanistic direction.
 
 ## 9. Biological interpretation
 
@@ -75,6 +85,13 @@ cell-line variance swamps the signal (873 genes), whereas `~ cell_line + infecti
 the infection response (**3,976 genes**). The top up-regulated genes are **inflammatory cytokines** (IL36G,
 IL1A) and **antiviral interferon-stimulated genes** (MX1) — the imbalanced cytokine/interferon host response
 to SARS-CoV-2 reported by Blanco-Melo et al.
+
+**Functional enrichment closes the loop:** the gene list is not a random bag — it collapses into one coherent
+program. ORA (top GO term *cytokine-mediated signaling*, adj p ≈ 1e-26) and GSEA (top pathways
+*cytokine-cytokine receptor interaction, TNF, NF-κB, NOD-like receptor, JAK-STAT*, NES ≈ +2.5, FDR q ≈ 0) both
+say infection drives a coordinated **innate-immune / inflammatory** response, while **oxidative
+phosphorylation** is coordinately **repressed** (NES ≈ −2.5) — a known viral suppression of host energy
+metabolism. That is the pathway-level conclusion the raw DEG list alone could not give.
 
 ## Language comparison (R vs Python)
 
@@ -87,11 +104,12 @@ gotcha when porting a DE analysis between the two.
 
 ```bash
 # R (RStudio)
-install.packages(c("tidyverse","BiocManager")); BiocManager::install(c("DESeq2","GEOquery","apeglm"))
+install.packages(c("tidyverse","BiocManager"))
+BiocManager::install(c("DESeq2","GEOquery","apeglm","clusterProfiler","org.Hs.eg.db","enrichplot"))
 # open rnaseq_de.R -> Session -> Set Working Directory -> To Source File Location -> Source
 
 # Python (Colab or local Jupyter)
-pip install pydeseq2 pandas matplotlib
+pip install pydeseq2 gseapy pandas matplotlib
 # run rnaseq_de.ipynb
 ```
 
@@ -103,20 +121,24 @@ Data is fetched live from GEO (GSE147507). (GEO downloads are occasionally slow 
 both R (DESeq2) and Python (PyDESeq2), fetched from the GEO API. Using a `~ cell_line + infection` design to
 control for cell-line confounding, recovered ~3,976 differentially expressed genes dominated by inflammatory
 cytokines and interferon-stimulated genes, and showed that controlling for the cell-line covariate increased
-detected DE genes 4.5-fold — a concrete illustration of why the design formula determines correctness.
-Cross-validated identical results across two independent DE toolchains.*
+detected DE genes 4.5-fold — a concrete illustration of why the design formula determines correctness. GO/KEGG
+over-representation and GSEA resolved the gene list into a coordinated cytokine / NF-κB / JAK-STAT innate-immune
+program with concomitant repression of oxidative phosphorylation. Cross-validated identical results across two
+independent toolchains.*
 
 ## Tech
 
-`R` (DESeq2, GEOquery, apeglm) · `Python` (PyDESeq2, pandas) · GEO API · negative-binomial GLMs
+`R` (DESeq2, GEOquery, apeglm, clusterProfiler) · `Python` (PyDESeq2, gseapy, pandas) · GEO API ·
+negative-binomial GLMs · GO/KEGG enrichment (ORA + GSEA)
 
 ## Files
 
 ```
-rnaseq_de.R                     # R implementation (DESeq2)
-rnaseq_de.ipynb                 # Python implementation (PyDESeq2)
+rnaseq_de.R                     # R: DESeq2 DE + clusterProfiler enrichment (GO/KEGG ORA + GSEA)
+rnaseq_de.ipynb                 # Python: PyDESeq2 DE + gseapy enrichment
 results_R/deseq2_results.csv    # full DE results
 results_R/volcano.png           # hero: shrunken-LFC volcano
 results_R/pca.png               # sample PCA (separates by cell line)
-results_py/…                    # Python equivalents
+results_R/enrichGO_up_dotplot.png, gseKEGG.csv, enrichGO_up.csv   # enrichment (R)
+results_py/…                    # Python equivalents (volcano, enrichr_up.csv, gsea_prerank.csv)
 ```

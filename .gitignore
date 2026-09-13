@@ -22,3 +22,13 @@ __pycache__/
 .RData
 .Rproj.user/
 *.sqlite
+WORKFLOW.md
+
+INTERVIEW_QA.md
+INTERPRETATION.md
+03_build.R
+03_build.ipynb
+ENRICHMENT_WORKFLOW.md 
+03_build.R
+03_build.ipynb
+ENRICHMENT_WORKFLOW.md
